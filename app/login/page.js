@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { Lock, Mail, UserPlus, LogIn, Globe } from 'lucide-react';
 import { auth, db } from '@/lib/firebase';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithRedirect, getRedirectResult } from 'firebase/auth';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 
 export default function LoginPage() {
@@ -35,6 +35,8 @@ export default function LoginPage() {
         }
     };
 
+    /* 
+    // Redirect logic removed in favor of Popup to avoid 404 errors on localhost
     useEffect(() => {
         const handleGoogleResult = async () => {
             try {
@@ -52,13 +54,21 @@ export default function LoginPage() {
         };
         handleGoogleResult();
     }, [router]);
+    */
 
     const handleGoogleLogin = async () => {
         setLoading(true);
         setError('');
         try {
             const provider = new GoogleAuthProvider();
-            await signInWithRedirect(auth, provider);
+            // Switch to Popup
+            const result = await signInWithPopup(auth, provider);
+            
+            if (result.user) {
+                await initializeUser(result.user);
+                localStorage.setItem('user', 'true');
+                router.push('/');
+            }
         } catch (err) {
             console.error(err);
             setError(err.message.replace('Firebase: ', ''));
