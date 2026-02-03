@@ -8,6 +8,9 @@ import { onAuthStateChanged } from 'firebase/auth';
 
 export default function TradingQuiz() {
     const [leverage, setLeverage] = useState(1);
+    const [ratio, setRatio] = useState(2); // Default 2:1
+    const [timeLeft, setTimeLeft] = useState(30); // 30s Timer
+    const [timerActive, setTimerActive] = useState(false);
     const [result, setResult] = useState(null);
     const [candles, setCandles] = useState([]);
     const [fullData, setFullData] = useState([]);
@@ -19,6 +22,17 @@ export default function TradingQuiz() {
     const [ruleStatus, setRuleStatus] = useState({ lp: 0, mp: 0 });
 
     useEffect(() => {
+        // CHECK FOR DEV BYPASS
+        if (typeof window !== 'undefined' && localStorage.getItem('user') === 'true') {
+             setUser({ email: 'dev@2r2w.com', uid: 'dev-123' });
+             setBalance({ total: 1000000, lp: 500000, mp: 300000, trading: 200000 });
+             setRuleStatus({ lp: 60, mp: 25 }); // Pass rules automatically
+             setCanTrade(true);
+             fetchChart();
+             setLoading(false);
+             return;
+        }
+
         const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
             if (currentUser) {
                 setUser(currentUser);
@@ -57,6 +71,19 @@ export default function TradingQuiz() {
         }
     };
 
+    useEffect(() => {
+        let interval;
+        if (timerActive && timeLeft > 0) {
+            interval = setInterval(() => {
+                setTimeLeft((prev) => prev - 1);
+            }, 1000);
+        } else if (timeLeft === 0 && timerActive) {
+            // Timeout - generate new chart automatically
+            fetchChart();
+        }
+        return () => clearInterval(interval);
+    }, [timerActive, timeLeft]);
+
     const fetchChart = async () => {
         try {
             const res = await fetch('/api/chart');
@@ -66,6 +93,8 @@ export default function TradingQuiz() {
                 setFullData(data.candles); // Store all 50 candles
                 setCandles(data.candles.slice(0, 20)); // Show first 20
                 setResult(null);
+                setTimeLeft(30);
+                setTimerActive(true);
             }
         } catch (e) {
             console.error(e);
@@ -87,11 +116,14 @@ export default function TradingQuiz() {
         if (type === 'long' && percentChange > 0) isWin = true;
         if (type === 'short' && percentChange < 0) isWin = true;
 
-        // Calculate PnL (Simplified: 1% bet of trading balance * leverage * change)
-        // Actually simplicity: Flat win/loss for game feel or real math?
-        // Let's do Real Math: Bet Size * Leverage * %Change
-        const betSize = 1000; // Fixed bet size for quiz simplicity or calculate based on input
-        const pnl = betSize * leverage * (Math.abs(percentChange) / 100);
+        // Stop timer
+        setTimerActive(false);
+
+        // Calculate PnL (Fixed Odds based on Ratio * Leverage)
+        const betSize = 1000;
+        // Win: Gain = Bet * Ratio * Leverage
+        // Loss: Loss = Bet
+        const pnl = isWin ? (betSize * ratio * leverage) : betSize;
 
         // Update Balance
         const newTradingBalance = isWin ? balance.trading + pnl : balance.trading - pnl;
@@ -103,8 +135,12 @@ export default function TradingQuiz() {
         };
 
         // Save to DB
-        const userRef = doc(db, "users", user.uid);
-        await updateDoc(userRef, { balance: newBalance });
+        if (typeof window !== 'undefined' && localStorage.getItem('user') === 'true') {
+             // DEV MODE: No DB save
+        } else {
+             const userRef = doc(db, "users", user.uid);
+             await updateDoc(userRef, { balance: newBalance });
+        }
         setBalance(newBalance);
 
         setResult({
@@ -234,23 +270,26 @@ export default function TradingQuiz() {
                 )}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '20px' }}>
-                <div style={{ background: 'var(--secondary)', padding: '10px', borderRadius: '12px' }}>
-                    <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginBottom: '5px' }}>APALANCAMIENTO</div>
-                    <div style={{ display: 'flex', gap: '5px' }}>
+            {/* GAME CONTROLS GRID */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '15px' }}>
+                
+                {/* ROW 1: LEVERAGE */}
+                <div style={{ background: 'var(--secondary)', padding: '10px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ fontSize: '0.7rem', color: '#94a3b8', width: '30%' }}>APALANCAMIENTO</div>
+                    <div style={{ display: 'flex', gap: '5px', flex: 1 }}>
                         {[1, 5, 10].map((val) => (
                             <button
                                 key={val}
                                 onClick={() => setLeverage(val)}
                                 style={{
                                     flex: 1,
-                                    padding: '6px',
+                                    padding: '5px',
                                     borderRadius: '6px',
                                     border: leverage === val ? '1px solid var(--primary)' : '1px solid transparent',
-                                    background: leverage === val ? 'rgba(251, 191, 36, 0.1)' : 'transparent',
+                                    background: leverage === val ? 'rgba(251, 191, 36, 0.1)' : '#1e293b',
                                     color: leverage === val ? 'var(--primary)' : '#64748b',
                                     fontWeight: 'bold',
-                                    fontSize: '0.9rem'
+                                    fontSize: '0.8rem'
                                 }}
                             >
                                 x{val}
@@ -258,18 +297,60 @@ export default function TradingQuiz() {
                         ))}
                     </div>
                 </div>
-                <div style={{ background: 'var(--secondary)', padding: '10px', borderRadius: '12px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                    <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>TAMAÑO APUESTA</div>
-                    <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>$1,000</div>
+
+                {/* ROW 2: RATIO */}
+                <div style={{ background: 'var(--secondary)', padding: '10px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ fontSize: '0.7rem', color: '#94a3b8', width: '30%' }}>RATIO TP:SL</div>
+                    <div style={{ display: 'flex', gap: '5px', flex: 1 }}>
+                        {[
+                            { label: '2:1', val: 2 },
+                            { label: '3:1', val: 3 },
+                            { label: '3:2', val: 1.5 },
+                            { label: '5:2', val: 2.5 }
+                        ].map((r) => (
+                            <button
+                                key={r.label}
+                                onClick={() => setRatio(r.val)}
+                                style={{
+                                    flex: 1,
+                                    padding: '5px',
+                                    borderRadius: '6px',
+                                    border: ratio === r.val ? '1px solid var(--primary)' : '1px solid transparent',
+                                    background: ratio === r.val ? 'rgba(251, 191, 36, 0.1)' : '#1e293b',
+                                    color: ratio === r.val ? 'var(--primary)' : '#64748b',
+                                    fontWeight: 'bold',
+                                    fontSize: '0.8rem'
+                                }}
+                            >
+                                {r.label}
+                            </button>
+                        ))}
+                    </div>
                 </div>
+
+                {/* ROW 3: INFO */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    {/* OPERATION SIZE */}
+                    <div style={{ background: 'var(--secondary)', padding: '8px', borderRadius: '10px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '0.65rem', color: '#94a3b8' }}>OPERACIÓN</div>
+                        <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>$1,000</div>
+                    </div>
+
+                    {/* POTENTIAL GAIN */}
+                    <div style={{ background: 'rgba(74, 222, 128, 0.1)', padding: '8px', borderRadius: '10px', textAlign: 'center', border: '1px solid rgba(74, 222, 128, 0.2)' }}>
+                         <div style={{ fontSize: '0.65rem', color: '#4ade80' }}>GANANCIA</div>
+                         <div style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#4ade80' }}>${(1000 * ratio * leverage).toLocaleString()}</div>
+                    </div>
+                </div>
+
             </div>
 
             {/* Actions */}
-            <div style={{ display: 'flex', gap: '15px' }}>
+            <div style={{ display: 'flex', gap: '15px', marginBottom: '15px' }}>
                 <button
                     onClick={() => handleTrade('short')}
                     className="btn"
-                    style={{ background: '#ef4444', display: 'flex', flexDirection: 'column', gap: '0', height: '70px' }}
+                    style={{ background: '#ef4444', display: 'flex', flexDirection: 'column', gap: '0', height: '70px', flex: 1 }}
                 >
                     <span style={{ fontSize: '1.2rem', fontWeight: '800' }}>SHORT</span>
                     <TrendingDown size={20} />
@@ -277,11 +358,17 @@ export default function TradingQuiz() {
                 <button
                     onClick={() => handleTrade('long')}
                     className="btn"
-                    style={{ background: '#4ade80', color: '#0f172a', display: 'flex', flexDirection: 'column', gap: '0', height: '70px' }}
+                    style={{ background: '#4ade80', color: '#0f172a', display: 'flex', flexDirection: 'column', gap: '0', height: '70px', flex: 1 }}
                 >
                     <span style={{ fontSize: '1.2rem', fontWeight: '800' }}>LONG</span>
                     <TrendingUp size={20} />
                 </button>
+            </div>
+
+            {/* TIMER BELOW ACTIONS */}
+            <div style={{ background: timeLeft <= 5 ? 'rgba(239, 68, 68, 0.2)' : 'var(--secondary)', padding: '10px', borderRadius: '12px', textAlign: 'center', border: timeLeft <= 5 ? '1px solid #ef4444' : 'none', transition: 'all 0.3s ease' }}>
+                <div style={{ fontSize: '0.7rem', color: timeLeft <= 5 ? '#ef4444' : '#94a3b8', marginBottom: '2px' }}>CONFIRMAR EN</div>
+                <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: timeLeft <= 5 ? '#ef4444' : 'white', fontFamily: 'monospace' }}>{timeLeft}s</div>
             </div>
         </div>
     );

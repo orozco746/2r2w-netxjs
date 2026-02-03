@@ -23,17 +23,30 @@ export default function Home() {
     };
 
     useEffect(() => {
+        // CHECK FOR DEV BYPASS
+        if (typeof window !== 'undefined' && localStorage.getItem('user') === 'true') {
+             console.log("Developer mode detected");
+             setUser({ email: 'dev@2r2w.com', uid: 'dev-123' });
+             setBalance({ total: 1000000, lp: 500000, mp: 300000, trading: 200000 });
+             setLoading(false);
+             return;
+        }
+
         const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
             if (currentUser) {
                 setUser(currentUser);
                 // Fetch User Data
-                const docRef = doc(db, "users", currentUser.uid);
-                const docSnap = await getDoc(docRef);
+                try {
+                    const docRef = doc(db, "users", currentUser.uid);
+                    const docSnap = await getDoc(docRef);
 
-                if (docSnap.exists()) {
-                    setBalance(docSnap.data().balance);
-                } else {
-                    console.log("No such document!");
+                    if (docSnap.exists()) {
+                        setBalance(docSnap.data().balance);
+                    } else {
+                        console.log("No such document!");
+                    }
+                } catch (e) {
+                    console.error("Error fetching user data:", e);
                 }
             }
             setLoading(false);

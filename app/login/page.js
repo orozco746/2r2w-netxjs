@@ -18,6 +18,11 @@ export default function LoginPage() {
 
     const initializeUser = async (user) => {
         // Check if user exists first to avoid overwriting existing balance
+        console.log("Initializing user:", user.uid);
+        if (!user || !user.uid) {
+            console.error("No valid user object provided to initializeUser");
+            return;
+        }
         const docRef = doc(db, "users", user.uid);
         const docSnap = await getDoc(docRef);
 
@@ -70,6 +75,11 @@ export default function LoginPage() {
                 router.push('/');
             }
         } catch (err) {
+            if (err.code === 'auth/cancelled-popup-request') {
+                console.log('Login popup cancelled by user');
+                setLoading(false);
+                return;
+            }
             console.error(err);
             setError(err.message.replace('Firebase: ', ''));
             setLoading(false);
@@ -84,13 +94,22 @@ export default function LoginPage() {
         try {
             if (isRegistering) {
                 // Register Logic
+                console.log("Starting registration...");
                 const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                console.log("Registration success, initializing user...", userCredential.user.uid);
                 await initializeUser(userCredential.user);
+                console.log("User initialized.");
             } else {
                 // Login Logic
-                await signInWithEmailAndPassword(auth, email, password);
+                console.log("Starting login...");
+                const userCredential = await signInWithEmailAndPassword(auth, email, password);
+                 console.log("Login success, initializing user logic...", userCredential.user.uid);
+                 // Note: initializeUser usually checks if doc exists, so safe to call on login too if needed
+                 // But typically login just redirects. If you need to ensure doc exists on login:
+                await initializeUser(userCredential.user);
             }
 
+            console.log("Redirecting...");
             localStorage.setItem('user', 'true');
             router.push('/');
 
@@ -170,6 +189,17 @@ export default function LoginPage() {
             >
                 <img src="https://www.svgrepo.com/show/475656/google-color.svg" width="20" height="20" alt="Google" />
                 Google
+            </button>
+
+             <button
+                onClick={() => {
+                    localStorage.setItem('user', 'true');
+                    router.push('/');
+                }}
+                className="btn"
+                style={{ marginTop: '15px', background: 'rgba(251, 191, 36, 0.1)', color: '#fbbf24', border: '1px dashed #fbbf24' }}
+            >
+                🛠️ Entrar como Desarrollador
             </button>
 
             <p style={{ marginTop: '30px', fontSize: '0.85rem' }}>
