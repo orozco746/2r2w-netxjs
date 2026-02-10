@@ -4,7 +4,16 @@
 
 ## Registro
 
-### 2026-02-03 (Actual)
+### 2026-02-10 (Actual)
+- **Trading Screen**: Se completó la lógica de trading con Ratios (2:1, 3:1, etc.), Apalancamiento (x1, x5, x10) y Timer de 30s.
+- **Liquidación**: Se implementaron botones para retirar capital de LP y MP (Vender Todo) hacia el balance de Trading.
+- **Historial**: Se agregó el registro de operaciones y una modal para visualizar el historial en la pantalla de Trading.
+- **Admin Panel**: Se creó una pantalla `/admin` protegida para agregar proyectos LP y actualizar datos económicos.
+- **Market Data**: Se creó una pantalla `/data` pública que muestra el índice Fear & Greed y datos económicos controlados desde el Admin.
+- **Navegación**: Se actualizó el BottomNav para incluir la pantalla de Data.
+- **Git**: Se realizó push de todos los cambios al repositorio.
+
+### 2026-02-03 (Contexto Previo)
 - **Configuración de Bitácora:** Se ha creado este archivo `BITACORA.md` para iniciar el registro de actividades.
 - **Contexto Anterior:** Se revisó el último commit en git para recuperar el contexto del trabajo previo.
 - **Acción:** Se inicia el servidor de desarrollo (`npm run dev`) para verificar el funcionamiento de la aplicación y retomar la tarea anterior (auth fix).
@@ -50,12 +59,3 @@
 ### 2026-01-29 (Contexto Previo)
 - **Commit:** `fix(auth): switch to signInWithPopup to resolve 404 error on localhost` (6f76feb)
 - **Descripción:** Se ajustó la autenticación para usar `signInWithPopup` y resolver errores en entorno local.
-
-### 2026-02-10
-- **Trading Screen**: Se completó la lógica de trading con Ratios (2:1, 3:1, etc.), Apalancamiento (x1, x5, x10) y Timer de 30s.
-- **Liquidación**: Se implementaron botones para retirar capital de LP y MP (Vender Todo) hacia el balance de Trading.
-- **Historial**: Se agregó el registro de operaciones y una modal para visualizar el historial en la pantalla de Trading.
-- **Admin Panel**: Se creó una pantalla `/admin` protegida para agregar proyectos LP y actualizar datos económicos.
-- **Market Data**: Se creó una pantalla `/data` pública que muestra el índice Fear & Greed y datos económicos controlados desde el Admin.
-- **Navegación**: Se actualizó el BottomNav para incluir la pantalla de Data.
-- **Git**: Se realizó push de todos los cambios al repositorio.
