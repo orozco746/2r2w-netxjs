@@ -1,7 +1,19 @@
+/**
+ * @file route.js
+ * @description API Route for fetching historical chart data.
+ * Randomly selects a data file from the 'data' directory, parses the JS content (const object),
+ * and returns a random 50-candle slice for the frontend simulation.
+ */
+
 import { NextResponse } from 'next/server';
 import path from 'path';
 import fs from 'fs';
 
+/**
+ * GET Handler
+ * Serves random historical candle data.
+ * @returns {NextResponse} JSON response with symbol and candles
+ */
 export async function GET() {
     try {
         const dataDir = path.join(process.cwd(), 'data');
@@ -37,16 +49,20 @@ export async function GET() {
         const candles = new Function('return ' + jsonString)();
 
         // Return first 500 candles to avoid payload too large, or randomize slice
-        const sliceStart = Math.floor(Math.random() * (candles.length - 50));
+        // Pick a random start point, ensuring at least 50 candles are available
+        const maxStart = Math.max(0, candles.length - 50);
+        const sliceStart = Math.floor(Math.random() * maxStart);
         const selectedCandles = candles.slice(sliceStart, sliceStart + 50);
 
         return NextResponse.json({
+            // Extract symbol from filename (e.g., MOCK_AAPL.txt -> AAPL)
             symbol: randomFile.split('_')[1].split('.')[0],
             candles: selectedCandles
         });
 
     } catch (error) {
-        console.error(error);
+        console.error("API Error:", error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }
+

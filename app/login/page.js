@@ -1,3 +1,10 @@
+/**
+ * @file page.js
+ * @description Login and Registration page.
+ * Supports Email/Password auth and Google Auth via Firebase.
+ * Initializes user data in Firestore upon first login.
+ */
+
 'use client';
 
 import { useRouter } from 'next/navigation';
@@ -7,6 +14,11 @@ import { auth, db } from '@/lib/firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 
+/**
+ * LoginPage Component
+ * Handles user authentication and redirection to the main app.
+ * @returns {JSX.Element} The login form
+ */
 export default function LoginPage() {
     const router = useRouter();
     const [loading, setLoading] = useState(false);
@@ -16,6 +28,11 @@ export default function LoginPage() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
 
+    /**
+     * Initializes user document in Firestore if it doesn't exist.
+     * Sets initial balance for new users.
+     * @param {Object} user - Firebase user object
+     */
     const initializeUser = async (user) => {
         // Check if user exists first to avoid overwriting existing balance
         console.log("Initializing user:", user.uid);
@@ -61,6 +78,9 @@ export default function LoginPage() {
     }, [router]);
     */
 
+    /**
+     * Handles Google Sign-In via Popup.
+     */
     const handleGoogleLogin = async () => {
         setLoading(true);
         setError('');
@@ -86,6 +106,10 @@ export default function LoginPage() {
         }
     };
 
+    /**
+     * Handles Email/Password Login and Registration.
+     * @param {Event} e - Form submission event
+     */
     const handleAuth = async (e) => {
         e.preventDefault();
         setLoading(true);
@@ -123,7 +147,7 @@ export default function LoginPage() {
 
     return (
         <div className="mobile-container" style={{ justifyContent: 'center', alignItems: 'center', padding: '30px', background: 'radial-gradient(circle at center, #1e293b 0%, #020617 100%)' }}>
-
+            {/* Logo and Title */}
             <div style={{ width: '100%', textAlign: 'center', marginBottom: '50px' }}>
                 <div style={{
                     width: '120px',

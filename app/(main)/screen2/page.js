@@ -1,3 +1,10 @@
+/**
+ * @file page.js (Screen 2 - MP)
+ * @description Market Portfolio (MP) screen.
+ * Stock market simulation where users can buy stocks/ETFs using their trading balance.
+ * Renders live-updating (simulated) charts for each asset.
+ */
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -6,6 +13,10 @@ import { auth, db } from '@/lib/firebase';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 
+/**
+ * MP Component
+ * @returns {JSX.Element} The market portfolio view
+ */
 export default function MP() {
     const [charts, setCharts] = useState({});
     const [balance, setBalance] = useState(null);
@@ -86,6 +97,11 @@ export default function MP() {
         }
     };
 
+    /**
+     * Handles buying an asset.
+     * Deducts cost from Trading balance and adds to MP balance.
+     * @param {Object} asset - The asset to buy
+     */
     const handleBuy = async (asset) => {
         // Logic: Buy 1 unit of the asset (simplified)
         const cost = asset.buy;
@@ -119,12 +135,54 @@ export default function MP() {
         }
     };
 
+
+    /**
+     * Sells all assets (MP) and moves funds back to Trading balance.
+     */
+    const handleSellAll = async () => {
+        if (!balance || balance.mp <= 0) {
+            alert("No tienes activos en MP para vender.");
+            return;
+        }
+
+        if (!confirm("¿Estás seguro de vender todas tus acciones y mover el capital a Trading?")) return;
+
+        setProcessing('sell_all');
+
+        try {
+            const newBalance = {
+                ...balance,
+                trading: balance.trading + balance.mp,
+                mp: 0
+            };
+
+            const userRef = doc(db, "users", user.uid);
+            await updateDoc(userRef, {
+                balance: newBalance
+            });
+
+            setBalance(newBalance);
+            alert("Portafolio liquidado exitosamente a Trading.");
+        } catch (error) {
+            console.error("Error selling all:", error);
+            alert("Error al liquidar portafolio.");
+        } finally {
+            setProcessing(null);
+        }
+    };
+
     if (loading) return <div className="mobile-container" style={{ justifyContent: 'center', alignItems: 'center' }}>Cargando...</div>;
 
     return (
         <div>
+            {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <h1>Mercado (MP)</h1>
+                <div>
+                    <h1 style={{ fontSize: '1.5rem', margin: 0 }}>Mercado (MP)</h1>
+                    <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+                         Inv: <span style={{ color: '#4ade80', fontWeight: 'bold' }}>${balance?.mp.toFixed(2)}</span>
+                    </div>
+                </div>
                 <div style={{ textAlign: 'right' }}>
                     <div style={{ background: 'rgba(251, 191, 36, 0.1)', padding: '5px 10px', borderRadius: '8px', color: 'var(--primary)', fontSize: '0.7rem', fontWeight: 'bold', border: '1px solid var(--primary)', display: 'inline-block', marginBottom: '4px' }}>
                         • En vivo
@@ -132,6 +190,25 @@ export default function MP() {
                     <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
                         Disp: <span style={{ color: '#fff', fontWeight: 'bold' }}>${balance?.trading.toFixed(2)}</span>
                     </div>
+                    {balance?.mp > 0 && (
+                        <button 
+                            onClick={handleSellAll}
+                            disabled={processing === 'sell_all'}
+                            style={{ 
+                                background: '#ef4444', 
+                                color: 'white', 
+                                border: 'none', 
+                                padding: '4px 8px', 
+                                borderRadius: '4px', 
+                                fontSize: '0.7rem', 
+                                cursor: 'pointer',
+                                marginTop: '4px',
+                                width: '100%'
+                            }}
+                        >
+                            {processing === 'sell_all' ? '...' : 'Vender Todo'}
+                        </button>
+                    )}
                 </div>
             </div>
 

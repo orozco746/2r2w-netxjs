@@ -1,3 +1,10 @@
+/**
+ * @file page.js
+ * @description Main dashboard page of the application.
+ * Displays user balance, portfolio breakdown (LP, MP, Trading), and quick actions.
+ * Fetches user data from Firestore upon authentication.
+ */
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -7,12 +14,23 @@ import { auth, db } from '@/lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 
+/**
+ * Home Component (Dashboard)
+ * @returns {JSX.Element} The dashboard view
+ */
 export default function Home() {
     const router = useRouter();
+    // State for user authentication data
     const [user, setUser] = useState(null);
+    // State for user financial balance
     const [balance, setBalance] = useState({ total: 0, lp: 0, mp: 0, trading: 0 });
+    // Loading state for asynchronous data fetching
     const [loading, setLoading] = useState(true);
 
+    /**
+     * Handles user logout.
+     * Signs out from Firebase and redirects to login page.
+     */
     const handleLogout = async () => {
         try {
             await signOut(auth);
@@ -22,6 +40,10 @@ export default function Home() {
         }
     };
 
+    /**
+     * Effect to handle authentication and data fetching.
+     * Checks for developer bypass mode or standard Firebase auth.
+     */
     useEffect(() => {
         // CHECK FOR DEV BYPASS
         if (typeof window !== 'undefined' && localStorage.getItem('user') === 'true') {
@@ -32,10 +54,11 @@ export default function Home() {
              return;
         }
 
+        // Listen for authentication state changes
         const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
             if (currentUser) {
                 setUser(currentUser);
-                // Fetch User Data
+                // Fetch User Data from Firestore
                 try {
                     const docRef = doc(db, "users", currentUser.uid);
                     const docSnap = await getDoc(docRef);
@@ -52,6 +75,7 @@ export default function Home() {
             setLoading(false);
         });
 
+        // Cleanup subscription on unmount
         return () => unsubscribe();
     }, []);
 
@@ -61,6 +85,7 @@ export default function Home() {
 
     return (
         <div>
+            {/* Header Section with User Info */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '25px' }}>
                 <div style={{ width: '50px', height: '50px', borderRadius: '50%', background: 'linear-gradient(45deg, var(--primary), var(--accent))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', fontWeight: 'bold' }}>
                     {user?.email?.[0].toUpperCase() || 'U'}
@@ -71,6 +96,7 @@ export default function Home() {
                 </div>
             </div>
 
+            {/* Total Balance Card */}
             <div className="card" style={{ background: 'linear-gradient(135deg, var(--secondary), #0f172a)', textAlign: 'center', padding: '30px 20px' }}>
                 <div style={{ fontSize: '0.9rem', color: '#94a3b8', marginBottom: '5px' }}>Balance Total</div>
                 <div style={{ fontSize: '2.5rem', fontWeight: '700', color: 'white' }}>${balance.total.toLocaleString()}</div>
@@ -79,7 +105,7 @@ export default function Home() {
 
             <h2>Portafolio</h2>
 
-            {/* LP Section */}
+            {/* LP Section (Liquidity Pool / Real Estate) */}
             <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
                 <div style={{ background: 'rgba(59, 130, 246, 0.2)', padding: '10px', borderRadius: '10px' }}>
                     <TrendingUp size={24} color="#3b82f6" />
@@ -96,7 +122,7 @@ export default function Home() {
                 </div>
             </div>
 
-            {/* MP Section */}
+            {/* MP Section (Market Portfolio / Stocks) */}
             <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
                 <div style={{ background: 'rgba(168, 85, 247, 0.2)', padding: '10px', borderRadius: '10px' }}>
                     <BarChart2 size={24} color="#a855f7" />
@@ -130,7 +156,7 @@ export default function Home() {
                 </div>
             </div>
 
-            {/* Quick Action */}
+            {/* Quick Action Buttons */}
             <div style={{ display: 'flex', gap: '10px' }}>
                 <button className="btn" style={{ flex: 1, background: 'var(--secondary)', border: '1px solid var(--primary)', color: 'var(--primary)' }}>
                     <Wallet size={18} style={{ marginRight: '8px' }} /> Depositar

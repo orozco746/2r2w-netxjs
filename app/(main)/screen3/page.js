@@ -1,11 +1,22 @@
+/**
+ * @file page.js (Screen 3 - Trading)
+ * @description Trading Quiz Game.
+ * Users predict the next movement of a stock (Long/Short).
+ * Requires meeting investment ratios (60% LP, 20% MP) to unlock.
+ */
+
 'use client';
 
 import { useState, useEffect } from 'react';
-import { TrendingUp, TrendingDown, Target, ShieldAlert, Zap, Lock } from 'lucide-react';
+import { TrendingUp, TrendingDown, Target, ShieldAlert, Zap, Lock, History, X } from 'lucide-react';
 import { auth, db } from '@/lib/firebase';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, addDoc, query, orderBy, limit, getDocs, serverTimestamp } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 
+/**
+ * TradingQuiz Component
+ * @returns {JSX.Element} The trading game interface
+ */
 export default function TradingQuiz() {
     const [leverage, setLeverage] = useState(1);
     const [ratio, setRatio] = useState(2); // Default 2:1
@@ -20,6 +31,8 @@ export default function TradingQuiz() {
     const [user, setUser] = useState(null);
     const [canTrade, setCanTrade] = useState(false);
     const [ruleStatus, setRuleStatus] = useState({ lp: 0, mp: 0 });
+    const [showHistory, setShowHistory] = useState(false);
+    const [historyData, setHistoryData] = useState([]);
 
     useEffect(() => {
         // CHECK FOR DEV BYPASS
@@ -43,6 +56,11 @@ export default function TradingQuiz() {
         return () => unsubscribe();
     }, []);
 
+    /**
+     * Checks if user meets the portfolio rules to unlock trading.
+     * Rule: 60% LP, 20% MP.
+     * @param {string} uid - User ID
+     */
     const checkEligibility = async (uid) => {
         const docRef = doc(db, "users", uid);
         const docSnap = await getDoc(docRef);
@@ -71,6 +89,35 @@ export default function TradingQuiz() {
         }
     };
 
+    /**
+     * Fetches trading history from Firestore.
+     */
+    const fetchHistory = async () => {
+        if (!user || user.uid === 'dev-123') return; // Skip for dev bypass for now or mock it
+
+        try {
+            const q = query(collection(db, `users/${user.uid}/history`), orderBy("timestamp", "desc"), limit(20));
+            const querySnapshot = await getDocs(q);
+            const history = [];
+            querySnapshot.forEach((doc) => {
+                history.push({ id: doc.id, ...doc.data() });
+            });
+            setHistoryData(history);
+        } catch (error) {
+            console.error("Error fetching history:", error);
+        }
+    };
+
+    useEffect(() => {
+        if (showHistory) {
+            fetchHistory();
+        }
+    }, [showHistory]);
+
+    /**
+     * Countdown timer logic.
+     * Auto-refreshes chart when time is up.
+     */
     useEffect(() => {
         let interval;
         if (timerActive && timeLeft > 0) {
@@ -84,6 +131,9 @@ export default function TradingQuiz() {
         return () => clearInterval(interval);
     }, [timerActive, timeLeft]);
 
+    /**
+     * Fetches a new historical chart candle set from the API.
+     */
     const fetchChart = async () => {
         try {
             const res = await fetch('/api/chart');
@@ -101,6 +151,11 @@ export default function TradingQuiz() {
         }
     };
 
+    /**
+     * Executes a trade prediction (Long/Short).
+     * Calculates win/loss based on future candles from the dataset.
+     * @param {string} type - 'long' or 'short'
+     */
     const handleTrade = async (type) => {
         if (!canTrade) return;
 
@@ -124,6 +179,7 @@ export default function TradingQuiz() {
         // Win: Gain = Bet * Ratio * Leverage
         // Loss: Loss = Bet
         const pnl = isWin ? (betSize * ratio * leverage) : betSize;
+        const netPnl = isWin ? pnl : -pnl; // For history display
 
         // Update Balance
         const newTradingBalance = isWin ? balance.trading + pnl : balance.trading - pnl;
@@ -140,6 +196,22 @@ export default function TradingQuiz() {
         } else {
              const userRef = doc(db, "users", user.uid);
              await updateDoc(userRef, { balance: newBalance });
+
+             // Save History
+             try {
+                 await addDoc(collection(db, `users/${user.uid}/history`), {
+                     timestamp: serverTimestamp(),
+                     symbol: symbol,
+                     type: type,
+                     leverage: leverage,
+                     ratio: ratio,
+                     result: isWin ? 'win' : 'loss',
+                     pnl: netPnl,
+                     balanceAfter: newTradingBalance
+                 });
+             } catch (error) {
+                 console.error("Error saving history:", error);
+             }
         }
         setBalance(newBalance);
 
@@ -188,17 +260,28 @@ export default function TradingQuiz() {
     }
 
     return (
-        <div>
+        <div style={{ position: 'relative' }}>
+            {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
                 <div>
                     <h1 style={{ fontSize: '1.5rem', margin: 0 }}>{symbol}</h1>
                     <p style={{ fontSize: '0.8rem', margin: 0 }}>Trading Quiz</p>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                    <div style={{ background: 'rgba(99, 102, 241, 0.2)', padding: '5px 10px', borderRadius: '8px', color: 'var(--accent)', fontSize: '0.8rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '4px' }}>
-                        <Zap size={14} /> En Vivo
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', justifyContent: 'flex-end' }}>
+                         <button 
+                            onClick={() => setShowHistory(true)}
+                            className="btn"
+                            style={{ padding: '6px', width: 'auto', background: 'var(--secondary)', border: '1px solid rgba(255,255,255,0.1)' }}
+                         >
+                            <History size={18} color="#94a3b8" />
+                         </button>
+                         <div style={{ background: 'rgba(99, 102, 241, 0.2)', padding: '5px 10px', borderRadius: '8px', color: 'var(--accent)', fontSize: '0.8rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <Zap size={14} /> En Vivo
+                        </div>
                     </div>
-                    <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#fbbf24' }}>${balance?.trading.toFixed(2)}</span>
+                    
+                    <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#fbbf24', display: 'block', marginTop: '4px' }}>${balance?.trading.toLocaleString()}</span>
                 </div>
             </div>
 
@@ -370,6 +453,48 @@ export default function TradingQuiz() {
                 <div style={{ fontSize: '0.7rem', color: timeLeft <= 5 ? '#ef4444' : '#94a3b8', marginBottom: '2px' }}>CONFIRMAR EN</div>
                 <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: timeLeft <= 5 ? '#ef4444' : 'white', fontFamily: 'monospace' }}>{timeLeft}s</div>
             </div>
+
+             {/* HISTORY MODAL */}
+             {showHistory && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.95)', zIndex: 100, padding: '20px', display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                        <h2 style={{ fontSize: '1.2rem', margin: 0 }}>Historial de Operaciones</h2>
+                        <button onClick={() => setShowHistory(false)} style={{ background: 'none', border: 'none', color: '#94a3b8' }}>
+                            <X size={24} />
+                        </button>
+                    </div>
+
+                    <div style={{ flex: 1, overflowY: 'auto' }}>
+                        {historyData.length === 0 ? (
+                            <div style={{ textAlign: 'center', color: '#64748b', marginTop: '50px' }}>No hay operaciones recientes</div>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                {historyData.map((trade) => (
+                                    <div key={trade.id} className="card" style={{ padding: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderLeft: trade.result === 'win' ? '4px solid #4ade80' : '4px solid #ef4444' }}>
+                                        <div>
+                                            <div style={{ fontWeight: 'bold', fontSize: '1rem' }}>{trade.symbol} <span style={{ fontSize: '0.8rem', color: trade.type === 'long' ? '#4ade80' : '#ef4444', textTransform: 'uppercase' }}>{trade.type}</span></div>
+                                            <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                                                Lev: x{trade.leverage} | Ratio: {trade.ratio}:1
+                                            </div>
+                                        </div>
+                                        <div style={{ textAlign: 'right' }}>
+                                            <div style={{ fontWeight: 'bold', fontSize: '1rem', color: trade.result === 'win' ? '#4ade80' : '#ef4444' }}>
+                                                {trade.result === 'win' ? '+' : '-'}${Math.abs(trade.pnl).toLocaleString()}
+                                            </div>
+                                            {trade.timestamp && (
+                                                <div style={{ fontSize: '0.7rem', color: '#64748b' }}>
+                                                    {/* Safe date formatting if timestamp exists */}
+                                                    {trade.timestamp.seconds ? new Date(trade.timestamp.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Reciente'}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

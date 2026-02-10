@@ -1,55 +1,30 @@
+/**
+ * @file page.js (Screen 1 - LP)
+ * @description Investment Opportunities (LP) screen.
+ * Users can invest their trading balance into real estate or business projects (LP).
+ * Investments transfer funds from Trading balance to LP balance.
+ */
+
 'use client';
 
 import { useState, useEffect } from 'react';
 import { Users, DollarSign, TrendingUp, CheckCircle, AlertCircle } from 'lucide-react';
 import { auth, db } from '@/lib/firebase';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, getDocs } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 
+/**
+ * LP Component
+ * @returns {JSX.Element} The investment opportunities list
+ */
 export default function LP() {
     const [balance, setBalance] = useState(null);
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
     const [investing, setInvesting] = useState(null); // ID of project being invested in
 
-    const projects = [
-        {
-            id: 1,
-            title: 'Residencial Altos',
-            profitability: '18%',
-            image: 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=500&q=80',
-            slots: 12,
-            totalSlots: 50,
-            price: 5000
-        },
-        {
-            id: 2,
-            title: 'Torre Corporativa',
-            profitability: '24%',
-            image: 'https://images.unsplash.com/photo-1486406140926-c627a92ad1ab?w=500&q=80',
-            slots: 5,
-            totalSlots: 20,
-            price: 15000
-        },
-        {
-            id: 3,
-            title: 'Plaza Comercial',
-            profitability: '15%',
-            image: 'https://images.unsplash.com/photo-1582037928769-1d8f977dbd93?w=500&q=80',
-            slots: 45,
-            totalSlots: 100,
-            price: 2500
-        },
-        {
-            id: 4,
-            title: 'Eco Villas',
-            profitability: '20%',
-            image: 'https://images.unsplash.com/photo-1518780664697-55e3ad937233?w=500&q=80',
-            slots: 2,
-            totalSlots: 10,
-            price: 25000
-        }
-    ];
+
+    const [projects, setProjects] = useState([]);
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -57,10 +32,27 @@ export default function LP() {
                 setUser(currentUser);
                 fetchBalance(currentUser.uid);
             }
-            setLoading(false);
+            // Fetch Projects
+            fetchProjects();
         });
         return () => unsubscribe();
     }, []);
+
+    const fetchProjects = async () => {
+         try {
+             // In a real app, you might want to order by createdAt
+             const querySnapshot = await getDocs(collection(db, "projects"));
+             const projs = [];
+             querySnapshot.forEach((doc) => {
+                 projs.push({ id: doc.id, ...doc.data() });
+             });
+             setProjects(projs);
+         } catch (e) {
+             console.error("Error fetching projects:", e);
+         } finally {
+             setLoading(false);
+         }
+    };
 
     const fetchBalance = async (uid) => {
         const docRef = doc(db, "users", uid);
@@ -70,6 +62,11 @@ export default function LP() {
         }
     };
 
+    /**
+     * Handles investment in a project.
+     * Deducts price from Trading balance and adds to LP balance.
+     * @param {Object} project - The project to invest in
+     */
     const handleInvest = async (project) => {
         if (!balance || balance.trading < project.price) {
             alert("Fondos insuficientes en Balance de Trading");
@@ -100,18 +97,80 @@ export default function LP() {
         }
     };
 
+
+    /**
+     * Withdraws all capital from LP balance to Trading balance.
+     */
+    const handleWithdraw = async () => {
+        if (!balance || balance.lp <= 0) {
+            alert("No tienes capital invertido en LP para retirar.");
+            return;
+        }
+
+        if (!confirm("¿Estás seguro de retirar todo tu capital de LP a Trading?")) return;
+
+        setInvesting('withdraw');
+
+        try {
+            const newBalance = {
+                ...balance,
+                trading: balance.trading + balance.lp,
+                lp: 0
+            };
+
+            const userRef = doc(db, "users", user.uid);
+            await updateDoc(userRef, {
+                balance: newBalance
+            });
+
+            setBalance(newBalance);
+            alert("Capital retirado exitosamente a Trading.");
+        } catch (error) {
+            console.error("Error withdrawing:", error);
+            alert("Error al retirar capital.");
+        } finally {
+            setInvesting(null);
+        }
+    };
+
     if (loading) return <div className="mobile-container" style={{ justifyContent: 'center', alignItems: 'center' }}>Cargando...</div>;
 
     return (
         <div>
+            {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                <h1>Oportunidades (LP)</h1>
-                <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
-                    Disp: <span style={{ color: '#fff', fontWeight: 'bold' }}>${balance?.trading.toLocaleString()}</span>
+                <div>
+                    <h1 style={{ fontSize: '1.5rem', margin: 0 }}>Oportunidades (LP)</h1>
+                    <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+                         Inv: <span style={{ color: '#4ade80', fontWeight: 'bold' }}>${balance?.lp.toLocaleString()}</span>
+                    </div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginBottom: '4px' }}>
+                        Disp: <span style={{ color: '#fff', fontWeight: 'bold' }}>${balance?.trading.toLocaleString()}</span>
+                    </div>
+                    {balance?.lp > 0 && (
+                        <button 
+                            onClick={handleWithdraw}
+                            disabled={investing === 'withdraw'}
+                            style={{ 
+                                background: '#ef4444', 
+                                color: 'white', 
+                                border: 'none', 
+                                padding: '4px 8px', 
+                                borderRadius: '4px', 
+                                fontSize: '0.7rem', 
+                                cursor: 'pointer' 
+                            }}
+                        >
+                            {investing === 'withdraw' ? '...' : 'Retirar Todo'}
+                        </button>
+                    )}
                 </div>
             </div>
             <p style={{ marginBottom: '20px', fontSize: '0.9rem' }}>Invierte tu capital para desbloquear el trading.</p>
 
+            {/* Projects List */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 {projects.map((project) => (
                     <div key={project.id} className="card" style={{ padding: 0, overflow: 'hidden' }}>
