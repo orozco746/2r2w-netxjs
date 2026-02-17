@@ -11,6 +11,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { Lock, Mail, UserPlus, LogIn, Globe } from 'lucide-react';
 import { auth, db } from '@/lib/firebase';
+import { testFirestoreConnection, ensureFirestoreOnline } from '@/lib/firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 
@@ -34,16 +35,31 @@ export default function LoginPage() {
      * @param {Object} user - Firebase user object
      */
     const initializeUser = async (user) => {
-        // Check if user exists first to avoid overwriting existing balance
-        console.log("Initializing user:", user.uid);
+        console.log("📋 [Login] initializeUser called with uid:", user?.uid);
+        console.log("📋 [Login] navigator.onLine:", navigator.onLine);
+        
         if (!user || !user.uid) {
-            console.error("No valid user object provided to initializeUser");
+            console.error("❌ [Login] No valid user object provided to initializeUser");
             return;
         }
+
+        // Test Firestore connectivity first
+        console.log("📋 [Login] Testing Firestore connectivity before DB access...");
+        const connTest = await testFirestoreConnection();
+        console.log("📋 [Login] Connectivity test result:", connTest);
+
+        if (!connTest.ok) {
+            console.warn("⚠️ [Login] Firestore appears offline, attempting enableNetwork...");
+            await ensureFirestoreOnline();
+        }
+
+        console.log("📋 [Login] Attempting getDoc for users/" + user.uid);
         const docRef = doc(db, "users", user.uid);
         const docSnap = await getDoc(docRef);
+        console.log("✅ [Login] getDoc succeeded, exists:", docSnap.exists());
 
         if (!docSnap.exists()) {
+            console.log("📋 [Login] Creating new user doc...");
             await setDoc(docRef, {
                 email: user.email,
                 balance: {
@@ -54,6 +70,7 @@ export default function LoginPage() {
                 },
                 createdAt: new Date()
             });
+            console.log("✅ [Login] User doc created");
         }
     };
 

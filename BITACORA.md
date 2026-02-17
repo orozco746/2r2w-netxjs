@@ -4,7 +4,21 @@
 
 ## Registro
 
-### 2026-02-10 (Actual)
+### 2026-02-17 (Actual)
+- **Error Firebase Offline**: Se reporta `FirebaseError: Failed to get document because the client is offline` al iniciar.
+- **Diagnóstico**: Se mejoró `lib/firebase.js` con logging extenso y funciones de ayuda (`enableNetwork`, `testFirestoreConnection`, `ensureFirestoreOnline`).
+- **Causa Raíz Encontrada**: La API REST de Firestore responde con `404 NOT_FOUND: The database (default) does not exist for project r2w-c89b6`. **La base de datos de Firestore nunca fue creada en la consola de Firebase.** El SDK reporta este error como "client is offline" de manera engañosa.
+- **Solución Firebase**: Se creó la base de datos en Firebase Console y se configuraron reglas de seguridad.
+- **Trading Lock System**: Se implementó sistema de bloqueo de Trading:
+    - Regla 50/30: Trading requiere mín 50% en LP y 30% en MP del capital total.
+    - `BottomNav.js`: El tab Trading muestra candado rojo y opacidad reducida cuando está bloqueado. Al tocarlo, aparece popup modal con barras de progreso explicando la regla.
+    - `screen3/page.js`: Eligibilidad actualizada de 60/20 a 50/30.
+- **MP Assets a Firestore**: Se migró el array hardcodeado de activos MP a colección `mp_assets` en Firestore.
+    - Seed script: `scripts/seed-mp-assets.js` pobló SPY, TSLA, NVDA, AAPL.
+    - `screen2/page.js`: Ahora fetcha activos dinámicamente de Firestore.
+    - Admin panel: Nuevo tab "Activos MP" para gestionar CRUD de activos.
+
+### 2026-02-10 (Anterior)
 - **Trading Screen**: Se completó la lógica de trading con Ratios (2:1, 3:1, etc.), Apalancamiento (x1, x5, x10) y Timer de 30s.
 - **Liquidación**: Se implementaron botones para retirar capital de LP y MP (Vender Todo) hacia el balance de Trading.
 - **Historial**: Se agregó el registro de operaciones y una modal para visualizar el historial en la pantalla de Trading.

@@ -80,7 +80,7 @@ export default function TradingQuiz() {
 
             setRuleStatus({ lp: lpPercent, mp: mpPercent });
 
-            if (lpPercent >= 60 && mpPercent >= 20) {
+            if (lpPercent >= 50 && mpPercent >= 30) {
                 setCanTrade(true);
                 fetchChart();
             } else {
@@ -234,23 +234,23 @@ export default function TradingQuiz() {
                     <Lock size={48} color="#ef4444" style={{ marginBottom: '15px' }} />
                     <h2 style={{ color: '#ef4444', marginBottom: '10px' }}>Trading Bloqueado</h2>
                     <p style={{ color: '#f8fafc', fontSize: '0.9rem' }}>
-                        Para operar, debes cumplir la regla 60/20 del club.
+                        Para operar, debes cumplir la regla 50/30 del club.
                     </p>
                     <div style={{ marginTop: '20px', textAlign: 'left', background: 'rgba(0,0,0,0.3)', padding: '15px', borderRadius: '10px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                            <span>Inversión LP (Min 60%)</span>
-                            <span style={{ color: ruleStatus.lp >= 60 ? '#4ade80' : '#ef4444', fontWeight: 'bold' }}>{ruleStatus.lp.toFixed(1)}%</span>
+                            <span>Inversión LP (Min 50%)</span>
+                            <span style={{ color: ruleStatus.lp >= 50 ? '#4ade80' : '#ef4444', fontWeight: 'bold' }}>{ruleStatus.lp.toFixed(1)}%</span>
                         </div>
                         <div style={{ width: '100%', height: '6px', background: '#334155', borderRadius: '3px' }}>
-                            <div style={{ width: `${Math.min(ruleStatus.lp, 100)}%`, height: '100%', background: ruleStatus.lp >= 60 ? '#4ade80' : '#ef4444', borderRadius: '3px' }}></div>
+                            <div style={{ width: `${Math.min(ruleStatus.lp, 100)}%`, height: '100%', background: ruleStatus.lp >= 50 ? '#4ade80' : '#ef4444', borderRadius: '3px' }}></div>
                         </div>
 
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', marginTop: '15px' }}>
-                            <span>Inversión MP (Min 20%)</span>
-                            <span style={{ color: ruleStatus.mp >= 20 ? '#4ade80' : '#ef4444', fontWeight: 'bold' }}>{ruleStatus.mp.toFixed(1)}%</span>
+                            <span>Inversión MP (Min 30%)</span>
+                            <span style={{ color: ruleStatus.mp >= 30 ? '#4ade80' : '#ef4444', fontWeight: 'bold' }}>{ruleStatus.mp.toFixed(1)}%</span>
                         </div>
                         <div style={{ width: '100%', height: '6px', background: '#334155', borderRadius: '3px' }}>
-                            <div style={{ width: `${Math.min(ruleStatus.mp, 100)}%`, height: '100%', background: ruleStatus.mp >= 20 ? '#4ade80' : '#ef4444', borderRadius: '3px' }}></div>
+                            <div style={{ width: `${Math.min(ruleStatus.mp, 100)}%`, height: '100%', background: ruleStatus.mp >= 30 ? '#4ade80' : '#ef4444', borderRadius: '3px' }}></div>
                         </div>
                     </div>
                     <p style={{ marginTop: '20px', fontSize: '0.8rem' }}>Ve a las secciones LP y MP para invertir tu capital.</p>

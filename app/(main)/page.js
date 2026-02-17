@@ -56,20 +56,24 @@ export default function Home() {
 
         // Listen for authentication state changes
         const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+            console.log("📋 [Dashboard] onAuthStateChanged fired, user:", currentUser?.uid || "null");
             if (currentUser) {
                 setUser(currentUser);
                 // Fetch User Data from Firestore
                 try {
+                    console.log("📋 [Dashboard] Fetching user doc from Firestore...");
                     const docRef = doc(db, "users", currentUser.uid);
                     const docSnap = await getDoc(docRef);
 
                     if (docSnap.exists()) {
+                        console.log("✅ [Dashboard] User doc loaded successfully");
                         setBalance(docSnap.data().balance);
                     } else {
-                        console.log("No such document!");
+                        console.warn("⚠️ [Dashboard] User doc does not exist!");
                     }
                 } catch (e) {
-                    console.error("Error fetching user data:", e);
+                    console.error("❌ [Dashboard] Error fetching user data:", e.code, e.message);
+                    console.error("❌ [Dashboard] Full error:", e);
                 }
             }
             setLoading(false);

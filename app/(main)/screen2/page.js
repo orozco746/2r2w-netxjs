@@ -10,7 +10,7 @@
 import { useState, useEffect } from 'react';
 import { TrendingUp, TrendingDown, Activity, DollarSign } from 'lucide-react';
 import { auth, db } from '@/lib/firebase';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 
 /**
@@ -23,71 +23,43 @@ export default function MP() {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
     const [processing, setProcessing] = useState(null);
-
-    const assets = [
-        {
-            symbol: 'SPY',
-            name: 'S&P 500 ETF',
-            price: 478.32,
-            change: '+1.2%',
-            isPositive: true,
-            per: '24.5',
-            buy: 478.40,
-            sell: 478.25,
-            chartColor: '#4ade80'
-        },
-        {
-            symbol: 'TSLA',
-            name: 'Tesla Inc',
-            price: 215.50,
-            change: '-2.4%',
-            isPositive: false,
-            per: '68.2',
-            buy: 215.60,
-            sell: 215.40,
-            chartColor: '#ef4444'
-        },
-        {
-            symbol: 'NVDA',
-            name: 'NVIDIA Corp',
-            price: 540.10,
-            change: '+5.8%',
-            isPositive: true,
-            per: '95.1',
-            buy: 540.25,
-            sell: 540.00,
-            chartColor: '#4ade80'
-        },
-        {
-            symbol: 'AAPL',
-            name: 'Apple Inc',
-            price: 185.90,
-            change: '+0.5%',
-            isPositive: true,
-            per: '29.3',
-            buy: 186.00,
-            sell: 185.80,
-            chartColor: '#4ade80'
-        }
-    ];
+    const [assets, setAssets] = useState([]);
 
     useEffect(() => {
-        // Generate hydration-safe random charts
-        const newCharts = {};
-        assets.forEach(asset => {
-            newCharts[asset.symbol] = Array.from({ length: 20 }).map(() => Math.floor(Math.random() * 50) + 10);
-        });
-        setCharts(newCharts);
-
         const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
             if (currentUser) {
                 setUser(currentUser);
                 fetchBalance(currentUser.uid);
             }
+            await fetchAssets();
             setLoading(false);
         });
         return () => unsubscribe();
     }, []);
+
+    /**
+     * Fetches MP assets from Firestore mp_assets collection.
+     */
+    const fetchAssets = async () => {
+        try {
+            const q = query(collection(db, 'mp_assets'), where('active', '==', true));
+            const snapshot = await getDocs(q);
+            const fetched = [];
+            snapshot.forEach((doc) => {
+                fetched.push({ id: doc.id, ...doc.data() });
+            });
+            setAssets(fetched);
+
+            // Generate charts after assets are loaded
+            const newCharts = {};
+            fetched.forEach(asset => {
+                newCharts[asset.symbol] = Array.from({ length: 20 }).map(() => Math.floor(Math.random() * 50) + 10);
+            });
+            setCharts(newCharts);
+        } catch (e) {
+            console.error("Error fetching MP assets:", e.code, e.message);
+        }
+    };
 
     const fetchBalance = async (uid) => {
         const docRef = doc(db, "users", uid);
