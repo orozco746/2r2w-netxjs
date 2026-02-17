@@ -17,6 +17,9 @@
     - Seed script: `scripts/seed-mp-assets.js` pobló SPY, TSLA, NVDA, AAPL.
     - `screen2/page.js`: Ahora fetcha activos dinámicamente de Firestore.
     - Admin panel: Nuevo tab "Activos MP" para gestionar CRUD de activos.
+- **LP Projects Seed**: Se pobló colección `projects` con 4 proyectos iniciales.
+    - Seed script: `scripts/seed-lp-projects.js` (Torre Lux, Residencias Aurora, Plaza Central, Parque Verde).
+    - Admin panel: Tab "Proyectos LP" ahora muestra lista de proyectos existentes con opción eliminar.
 
 ### 2026-02-10 (Anterior)
 - **Trading Screen**: Se completó la lógica de trading con Ratios (2:1, 3:1, etc.), Apalancamiento (x1, x5, x10) y Timer de 30s.

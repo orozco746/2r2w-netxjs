@@ -31,6 +31,7 @@ export default function AdminPage() {
         per: '', buy: 0, sell: 0, chartColor: '#4ade80', active: true
     });
     const [mpAssets, setMpAssets] = useState([]);
+    const [lpProjects, setLpProjects] = useState([]);
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -39,6 +40,7 @@ export default function AdminPage() {
                     setUser(currentUser);
                     fetchMarketData();
                     fetchMpAssets();
+                    fetchLpProjects();
                 } else {
                     router.push('/');
                 }
@@ -67,12 +69,30 @@ export default function AdminPage() {
         } catch (e) { console.error("Error fetching MP assets", e); }
     };
 
+    const fetchLpProjects = async () => {
+        try {
+            const snapshot = await getDocs(collection(db, "projects"));
+            const projs = [];
+            snapshot.forEach((d) => projs.push({ id: d.id, ...d.data() }));
+            setLpProjects(projs);
+        } catch (e) { console.error("Error fetching LP projects", e); }
+    };
+
+    const handleDeleteProject = async (projectId) => {
+        if (!confirm(`¿Eliminar este proyecto?`)) return;
+        try {
+            await deleteDoc(doc(db, "projects", projectId));
+            fetchLpProjects();
+        } catch (e) { console.error("Error deleting project:", e); }
+    };
+
     const handleProjectSubmit = async (e) => {
         e.preventDefault();
         try {
             await addDoc(collection(db, "projects"), { ...projectForm, createdAt: new Date() });
             alert('Proyecto agregado correctamente');
             setProjectForm({ title: '', profitability: '', image: '', slots: 0, totalSlots: 0, price: 0 });
+            fetchLpProjects();
         } catch (e) { console.error("Error adding project: ", e); alert('Error al guardar proyecto'); }
     };
 
@@ -135,7 +155,35 @@ export default function AdminPage() {
             {/* ===== PROJECTS LP TAB ===== */}
             {activeTab === 'projects' && (
                 <div className="card">
-                    <h2><Plus size={20} style={{ display: 'inline' }}/> Agregar Proyecto LP</h2>
+                    <h2><Activity size={20} style={{ display: 'inline' }}/> Gestionar Proyectos LP</h2>
+
+                    {/* Existing Projects */}
+                    {lpProjects.length > 0 && (
+                        <div style={{ marginBottom: '20px' }}>
+                            <h3 style={{ fontSize: '0.9rem', color: '#94a3b8', marginBottom: '10px' }}>Proyectos Actuales ({lpProjects.length})</h3>
+                            {lpProjects.map((p) => (
+                                <div key={p.id} style={{
+                                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                    background: '#1e293b', padding: '10px 15px', borderRadius: '8px', marginBottom: '6px'
+                                }}>
+                                    <div>
+                                        <span style={{ fontWeight: 'bold', color: '#f8fafc' }}>{p.title}</span>
+                                        <span style={{ color: '#94a3b8', fontSize: '0.8rem', marginLeft: '10px' }}>{p.profitability}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                        <span style={{ color: '#4ade80', fontSize: '0.85rem' }}>${p.price}/slot</span>
+                                        <span style={{ color: '#94a3b8', fontSize: '0.75rem' }}>{p.slots}/{p.totalSlots}</span>
+                                        <button onClick={() => handleDeleteProject(p.id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer' }}>
+                                            <Trash2 size={16} />
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Add Form */}
+                    <h3 style={{ fontSize: '0.9rem', color: '#94a3b8', marginBottom: '10px' }}>Agregar Proyecto</h3>
                     <form onSubmit={handleProjectSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                         <input placeholder="Título (ej. Torre Lux)" value={projectForm.title} onChange={(e) => setProjectForm({...projectForm, title: e.target.value})} style={inputStyle} required />
                         <div style={{ display: 'flex', gap: '10px' }}>
