@@ -4,7 +4,32 @@
 
 ## Registro
 
-### 2026-02-17 (Actual)
+### 2026-02-24 (Actual)
+- **Auth Enforcement**: Se eliminó el botón "Entrar como Desarrollador" de login y toda lógica de bypass en `layout.js`, `page.js` y `screen3/page.js`. Ahora solo se accede con Firebase Auth real.
+- **Admin Access**: Se agregó `jeorozcob@gmail.com` al array de admins en `admin/page.js`.
+- **Trading Access Rule Update**: Se cambió la regla de acceso a Trading:
+    - **Antes:** LP ≥ 50% y MP ≥ 30% (por separado).
+    - **Ahora:** LP + MP ≥ 90% del capital total (combinado).
+    - Actualizado en `screen3/page.js` y `BottomNav.js`.
+- **LP Rule for MP Purchases**: Nueva regla: se requiere al menos 50% del capital en LP para comprar en MP. Se verifica solo al momento de la compra (no al cargar la pantalla) para evitar bloqueos por apreciación de activos.
+    - Botón de compra muestra `🔒 Requiere 50% en LP` cuando no se cumple.
+    - Verificación adicional en `handleBuy`.
+- **BottomNav Fix**: Se corrigió bug donde el BottomNav tenía la regla vieja (50/30) y un dev bypass. Ahora usa la regla combinada del 90%.
+- **Trading Chart Improvements** (`screen3/page.js`):
+    - Gráfica reescrita en **SVG** para renderizado preciso.
+    - **MA20** (media móvil): línea púrpura superpuesta.
+    - **Líneas SL/TP/Entry**: líneas punteadas con etiquetas (verde TP, rojo SL, amarillo Entry) basadas en 2% de riesgo × ratio.
+    - **Divisor vertical** separando velas pre-trade de las reveladas.
+    - **Banner de resultado** debajo de la gráfica en lugar de overlay opaco, permitiendo ver la gráfica con todos los indicadores después de operar.
+- **MP Tabs & Positions** (`screen2/page.js`):
+    - Dos pestañas: **"Operar"** (compra de activos) y **"Mis Posiciones"** (posiciones abiertas).
+    - Tracking de posiciones individuales en Firestore (`users/{uid}/mp_positions`).
+    - Compras del mismo símbolo se promedian (cost averaging).
+    - Vista de posiciones con P&L (%, $), precio de entrada vs actual, valor de mercado.
+    - Modal de cierre con botones rápidos (25%, 50%, 75%, 100%) y cierre parcial/total.
+    - Se removió el botón "Vender Todo" (reemplazado por cierre por posición).
+
+### 2026-02-17 (Anterior)
 - **Error Firebase Offline**: Se reporta `FirebaseError: Failed to get document because the client is offline` al iniciar.
 - **Diagnóstico**: Se mejoró `lib/firebase.js` con logging extenso y funciones de ayuda (`enableNetwork`, `testFirestoreConnection`, `ensureFirestoreOnline`).
 - **Causa Raíz Encontrada**: La API REST de Firestore responde con `404 NOT_FOUND: The database (default) does not exist for project r2w-c89b6`. **La base de datos de Firestore nunca fue creada en la consola de Firebase.** El SDK reporta este error como "client is offline" de manera engañosa.

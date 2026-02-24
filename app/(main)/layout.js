@@ -6,9 +6,11 @@
 
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import BottomNav from '@/components/BottomNav';
+import { auth } from '@/lib/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 
 /**
  * MainLayout Component
@@ -20,14 +22,23 @@ import BottomNav from '@/components/BottomNav';
  */
 export default function MainLayout({ children }) {
     const router = useRouter();
+    const [isAuth, setIsAuth] = useState(false);
 
     // Check for authentication on mount
     useEffect(() => {
-        const user = localStorage.getItem('user');
-        if (!user) {
-            router.push('/login');
-        }
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
+            if (!user) {
+                router.push('/login');
+            } else {
+                setIsAuth(true);
+            }
+        });
+        return () => unsubscribe();
     }, [router]);
+
+    if (!isAuth) {
+        return <div className="mobile-container" style={{ justifyContent: 'center', alignItems: 'center' }}>Cargando...</div>;
+    }
 
     return (
         <div className="mobile-container">

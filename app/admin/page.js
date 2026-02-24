@@ -7,7 +7,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { collection, addDoc, doc, setDoc, getDoc, getDocs, deleteDoc } from 'firebase/firestore';
 import { ShieldAlert, Plus, Save, Activity, Trash2 } from 'lucide-react';
 
-const ADMIN_EMAILS = ['test@example.com', 'admin@2r2w.com', 'dev@2r2w.com', 'orozco746@gmail.com'];
+const ADMIN_EMAILS = ['test@example.com', 'admin@2r2w.com', 'dev@2r2w.com', 'orozco746@gmail.com', 'jeorozcob@gmail.com'];
 
 export default function AdminPage() {
     const router = useRouter();
@@ -191,8 +191,14 @@ export default function AdminPage() {
                             <input placeholder="Precio x Slot ($)" type="number" value={projectForm.price || ''} onChange={(e) => setProjectForm({...projectForm, price: Number(e.target.value)})} style={{ ...inputStyle, flex: 1 }} required />
                         </div>
                         <div style={{ display: 'flex', gap: '10px' }}>
-                            <input placeholder="Slots Totales" type="number" value={projectForm.totalSlots || ''} onChange={(e) => setProjectForm({...projectForm, totalSlots: Number(e.target.value)})} style={{ ...inputStyle, flex: 1 }} required />
-                            <input placeholder="Slots Ocupados" type="number" value={projectForm.slots || 0} onChange={(e) => setProjectForm({...projectForm, slots: Number(e.target.value)})} style={{ ...inputStyle, flex: 1 }} />
+                            <div style={{ flex: 1 }}>
+                                <label style={{ fontSize: '0.8rem', color: '#94a3b8', display: 'block', marginBottom: '5px' }}>Total Tramos (Slots)</label>
+                                <input placeholder="Total a vender" type="number" value={projectForm.totalSlots || ''} onChange={(e) => setProjectForm({...projectForm, totalSlots: Number(e.target.value)})} style={{ ...inputStyle, width: '100%' }} required />
+                            </div>
+                            <div style={{ flex: 1 }}>
+                                <label style={{ fontSize: '0.8rem', color: '#94a3b8', display: 'block', marginBottom: '5px' }}>Tramos Vendidos</label>
+                                <input placeholder="Ya comprados" type="number" value={projectForm.slots || 0} onChange={(e) => setProjectForm({...projectForm, slots: Number(e.target.value)})} style={{ ...inputStyle, width: '100%' }} />
+                            </div>
                         </div>
                         <input placeholder="URL Imagen" value={projectForm.image} onChange={(e) => setProjectForm({...projectForm, image: e.target.value})} style={inputStyle} required />
                         <button type="submit" className="btn" style={{ marginTop: '10px' }}>Guardar Proyecto</button>

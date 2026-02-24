@@ -45,14 +45,7 @@ export default function Home() {
      * Checks for developer bypass mode or standard Firebase auth.
      */
     useEffect(() => {
-        // CHECK FOR DEV BYPASS
-        if (typeof window !== 'undefined' && localStorage.getItem('user') === 'true') {
-             console.log("Developer mode detected");
-             setUser({ email: 'dev@2r2w.com', uid: 'dev-123' });
-             setBalance({ total: 1000000, lp: 500000, mp: 300000, trading: 200000 });
-             setLoading(false);
-             return;
-        }
+
 
         // Listen for authentication state changes
         const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {

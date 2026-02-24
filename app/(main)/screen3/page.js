@@ -2,12 +2,12 @@
  * @file page.js (Screen 3 - Trading)
  * @description Trading Quiz Game.
  * Users predict the next movement of a stock (Long/Short).
- * Requires meeting investment ratios (60% LP, 20% MP) to unlock.
+ * Requires meeting investment ratio (LP + MP >= 90% of total) to unlock.
  */
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { TrendingUp, TrendingDown, Target, ShieldAlert, Zap, Lock, History, X } from 'lucide-react';
 import { auth, db } from '@/lib/firebase';
 import { doc, getDoc, updateDoc, collection, addDoc, query, orderBy, limit, getDocs, serverTimestamp } from 'firebase/firestore';
@@ -30,35 +30,31 @@ export default function TradingQuiz() {
     const [balance, setBalance] = useState(null);
     const [user, setUser] = useState(null);
     const [canTrade, setCanTrade] = useState(false);
-    const [ruleStatus, setRuleStatus] = useState({ lp: 0, mp: 0 });
+    const [ruleStatus, setRuleStatus] = useState({ combined: 0 });
     const [showHistory, setShowHistory] = useState(false);
     const [historyData, setHistoryData] = useState([]);
+    const [tradeInfo, setTradeInfo] = useState(null); // { entryPrice, sl, tp, type }
 
     useEffect(() => {
-        // CHECK FOR DEV BYPASS
-        if (typeof window !== 'undefined' && localStorage.getItem('user') === 'true') {
-             setUser({ email: 'dev@2r2w.com', uid: 'dev-123' });
-             setBalance({ total: 1000000, lp: 500000, mp: 300000, trading: 200000 });
-             setRuleStatus({ lp: 60, mp: 25 }); // Pass rules automatically
-             setCanTrade(true);
-             fetchChart();
-             setLoading(false);
-             return;
-        }
-
         const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
             if (currentUser) {
                 setUser(currentUser);
-                await checkEligibility(currentUser.uid);
             }
             setLoading(false);
         });
         return () => unsubscribe();
     }, []);
 
+    // Re-check eligibility every time the component mounts or user changes
+    useEffect(() => {
+        if (user) {
+            checkEligibility(user.uid);
+        }
+    }, [user]);
+
     /**
      * Checks if user meets the portfolio rules to unlock trading.
-     * Rule: 60% LP, 20% MP.
+     * Rule: LP + MP must be >= 90% of total capital.
      * @param {string} uid - User ID
      */
     const checkEligibility = async (uid) => {
@@ -69,18 +65,12 @@ export default function TradingQuiz() {
             const bal = docSnap.data().balance;
             setBalance(bal);
 
-            const totalCapital = bal.total; // Assumes total is updated dynamically or we calc it: lp + mp + trading
-            // Or calculate total distinct from 'total' field if that's just initial.
-            // Let's assume balance.total is the tracked Net Worth.
-            // Recalculate true Total for accurate percentages
             const trueTotal = bal.lp + bal.mp + bal.trading;
+            const combinedPercent = trueTotal > 0 ? ((bal.lp + bal.mp) / trueTotal) * 100 : 0;
 
-            const lpPercent = (bal.lp / trueTotal) * 100;
-            const mpPercent = (bal.mp / trueTotal) * 100;
+            setRuleStatus({ combined: combinedPercent });
 
-            setRuleStatus({ lp: lpPercent, mp: mpPercent });
-
-            if (lpPercent >= 50 && mpPercent >= 30) {
+            if (combinedPercent >= 90) {
                 setCanTrade(true);
                 fetchChart();
             } else {
@@ -93,7 +83,7 @@ export default function TradingQuiz() {
      * Fetches trading history from Firestore.
      */
     const fetchHistory = async () => {
-        if (!user || user.uid === 'dev-123') return; // Skip for dev bypass for now or mock it
+        if (!user) return;
 
         try {
             const q = query(collection(db, `users/${user.uid}/history`), orderBy("timestamp", "desc"), limit(20));
@@ -143,6 +133,7 @@ export default function TradingQuiz() {
                 setFullData(data.candles); // Store all 50 candles
                 setCandles(data.candles.slice(0, 20)); // Show first 20
                 setResult(null);
+                setTradeInfo(null);
                 setTimeLeft(30);
                 setTimerActive(true);
             }
@@ -152,6 +143,25 @@ export default function TradingQuiz() {
     };
 
     /**
+     * Computes MA50 (or as many as available) for all visible candles.
+     * Uses fullData to have enough historical context.
+     */
+    const ma50Data = useMemo(() => {
+        if (fullData.length === 0) return [];
+        const visibleCount = candles.length;
+        const result = [];
+        for (let i = 0; i < visibleCount; i++) {
+            // For each visible candle, calculate MA using up to 50 previous candles from fullData
+            const endIdx = i + 1;
+            const startIdx = Math.max(0, endIdx - 20); // MA20 for this chart scale
+            const slice = fullData.slice(startIdx, endIdx);
+            const avg = slice.reduce((sum, c) => sum + c.close, 0) / slice.length;
+            result.push(avg);
+        }
+        return result;
+    }, [candles, fullData]);
+
+    /**
      * Executes a trade prediction (Long/Short).
      * Calculates win/loss based on future candles from the dataset.
      * @param {string} type - 'long' or 'short'
@@ -159,10 +169,10 @@ export default function TradingQuiz() {
     const handleTrade = async (type) => {
         if (!canTrade) return;
 
-        // Bet logic: Win/Loss based on next 10 candles average vs current Close
+        // Entry price = last visible candle close
         const currentPrice = candles[candles.length - 1].close;
         const futureCandles = fullData.slice(20, 30); // Take next 10
-        if (futureCandles.length === 0) return; // Error safety
+        if (futureCandles.length === 0) return;
 
         const futurePrice = futureCandles[futureCandles.length - 1].close;
         const percentChange = ((futurePrice - currentPrice) / currentPrice) * 100;
@@ -174,12 +184,26 @@ export default function TradingQuiz() {
         // Stop timer
         setTimerActive(false);
 
+        // Calculate SL/TP levels based on a realistic % move
+        const riskPercent = 0.02; // 2% risk per trade
+        const slDistance = currentPrice * riskPercent;
+        const tpDistance = slDistance * ratio;
+
+        let sl, tp;
+        if (type === 'long') {
+            sl = currentPrice - slDistance;
+            tp = currentPrice + tpDistance;
+        } else {
+            sl = currentPrice + slDistance;
+            tp = currentPrice - tpDistance;
+        }
+
+        setTradeInfo({ entryPrice: currentPrice, sl, tp, type });
+
         // Calculate PnL (Fixed Odds based on Ratio * Leverage)
         const betSize = 1000;
-        // Win: Gain = Bet * Ratio * Leverage
-        // Loss: Loss = Bet
         const pnl = isWin ? (betSize * ratio * leverage) : betSize;
-        const netPnl = isWin ? pnl : -pnl; // For history display
+        const netPnl = isWin ? pnl : -pnl;
 
         // Update Balance
         const newTradingBalance = isWin ? balance.trading + pnl : balance.trading - pnl;
@@ -191,28 +215,25 @@ export default function TradingQuiz() {
         };
 
         // Save to DB
-        if (typeof window !== 'undefined' && localStorage.getItem('user') === 'true') {
-             // DEV MODE: No DB save
-        } else {
-             const userRef = doc(db, "users", user.uid);
-             await updateDoc(userRef, { balance: newBalance });
+        const userRef = doc(db, "users", user.uid);
+        await updateDoc(userRef, { balance: newBalance });
 
-             // Save History
-             try {
-                 await addDoc(collection(db, `users/${user.uid}/history`), {
-                     timestamp: serverTimestamp(),
-                     symbol: symbol,
-                     type: type,
-                     leverage: leverage,
-                     ratio: ratio,
-                     result: isWin ? 'win' : 'loss',
-                     pnl: netPnl,
-                     balanceAfter: newTradingBalance
-                 });
-             } catch (error) {
-                 console.error("Error saving history:", error);
-             }
+        // Save History
+        try {
+            await addDoc(collection(db, `users/${user.uid}/history`), {
+                timestamp: serverTimestamp(),
+                symbol: symbol,
+                type: type,
+                leverage: leverage,
+                ratio: ratio,
+                result: isWin ? 'win' : 'loss',
+                pnl: netPnl,
+                balanceAfter: newTradingBalance
+            });
+        } catch (error) {
+            console.error("Error saving history:", error);
         }
+
         setBalance(newBalance);
 
         setResult({
@@ -221,7 +242,7 @@ export default function TradingQuiz() {
             percent: percentChange.toFixed(2)
         });
 
-        // Reveal chart
+        // Reveal future candles on chart
         setCandles(fullData.slice(0, 30));
     };
 
@@ -234,26 +255,30 @@ export default function TradingQuiz() {
                     <Lock size={48} color="#ef4444" style={{ marginBottom: '15px' }} />
                     <h2 style={{ color: '#ef4444', marginBottom: '10px' }}>Trading Bloqueado</h2>
                     <p style={{ color: '#f8fafc', fontSize: '0.9rem' }}>
-                        Para operar, debes cumplir la regla 50/30 del club.
+                        Para operar, la suma de tus inversiones en LP y MP debe ser al menos el <strong>90%</strong> de tu capital total.
                     </p>
                     <div style={{ marginTop: '20px', textAlign: 'left', background: 'rgba(0,0,0,0.3)', padding: '15px', borderRadius: '10px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                            <span>Inversión LP (Min 50%)</span>
-                            <span style={{ color: ruleStatus.lp >= 50 ? '#4ade80' : '#ef4444', fontWeight: 'bold' }}>{ruleStatus.lp.toFixed(1)}%</span>
+                            <span>LP + MP (Mín 90%)</span>
+                            <span style={{ color: ruleStatus.combined >= 90 ? '#4ade80' : '#ef4444', fontWeight: 'bold' }}>{ruleStatus.combined.toFixed(1)}%</span>
                         </div>
                         <div style={{ width: '100%', height: '6px', background: '#334155', borderRadius: '3px' }}>
-                            <div style={{ width: `${Math.min(ruleStatus.lp, 100)}%`, height: '100%', background: ruleStatus.lp >= 50 ? '#4ade80' : '#ef4444', borderRadius: '3px' }}></div>
+                            <div style={{ width: `${Math.min(ruleStatus.combined, 100)}%`, height: '100%', background: ruleStatus.combined >= 90 ? '#4ade80' : '#ef4444', borderRadius: '3px', transition: 'width 0.5s ease' }}></div>
                         </div>
-
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', marginTop: '15px' }}>
-                            <span>Inversión MP (Min 30%)</span>
-                            <span style={{ color: ruleStatus.mp >= 30 ? '#4ade80' : '#ef4444', fontWeight: 'bold' }}>{ruleStatus.mp.toFixed(1)}%</span>
-                        </div>
-                        <div style={{ width: '100%', height: '6px', background: '#334155', borderRadius: '3px' }}>
-                            <div style={{ width: `${Math.min(ruleStatus.mp, 100)}%`, height: '100%', background: ruleStatus.mp >= 30 ? '#4ade80' : '#ef4444', borderRadius: '3px' }}></div>
-                        </div>
+                        {balance && (
+                            <div style={{ marginTop: '12px', fontSize: '0.8rem', color: '#94a3b8' }}>
+                                LP: ${balance.lp.toLocaleString()} + MP: ${balance.mp.toLocaleString()} = <span style={{ color: '#fbbf24', fontWeight: 'bold' }}>${(balance.lp + balance.mp).toLocaleString()}</span> de ${(balance.lp + balance.mp + balance.trading).toLocaleString()}
+                            </div>
+                        )}
                     </div>
                     <p style={{ marginTop: '20px', fontSize: '0.8rem' }}>Ve a las secciones LP y MP para invertir tu capital.</p>
+                    <button
+                        onClick={() => user && checkEligibility(user.uid)}
+                        className="btn"
+                        style={{ marginTop: '10px', background: 'rgba(251, 191, 36, 0.1)', color: '#fbbf24', border: '1px solid #fbbf24' }}
+                    >
+                        🔄 Verificar de nuevo
+                    </button>
                 </div>
             </div>
         );
@@ -286,72 +311,135 @@ export default function TradingQuiz() {
             </div>
 
             {/* Chart Simulation */}
-            <div className="card" style={{ height: '250px', padding: '10px 0', position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'flex-end', gap: '2px' }}>
-                {/* Grid lines */}
-                <div style={{ position: 'absolute', top: '25%', width: '100%', height: '1px', background: 'rgba(255,255,255,0.05)' }}></div>
-                <div style={{ position: 'absolute', top: '50%', width: '100%', height: '1px', background: 'rgba(255,255,255,0.05)' }}></div>
-                <div style={{ position: 'absolute', top: '75%', width: '100%', height: '1px', background: 'rgba(255,255,255,0.05)' }}></div>
+            {(() => {
+                const chartHeight = 280;
+                const padding = { top: 15, bottom: 15, left: 0, right: 0 };
+                const innerH = chartHeight - padding.top - padding.bottom;
+                const allPrices = candles.flatMap(c => [c.high, c.low]);
+                if (tradeInfo) {
+                    allPrices.push(tradeInfo.sl, tradeInfo.tp, tradeInfo.entryPrice);
+                }
+                const priceMin = Math.min(...allPrices) * 0.999;
+                const priceMax = Math.max(...allPrices) * 1.001;
+                const priceRange = priceMax - priceMin || 1;
+                const yFromPrice = (price) => padding.top + innerH - ((price - priceMin) / priceRange) * innerH;
+                const candleCount = candles.length;
+                const entryIndex = 20; // divider line position
 
-                {/* Candles */}
-                {candles.map((candle, i) => {
-                    // Normalize for display (rough scaling)
-                    const min = Math.min(...candles.map(c => c.low));
-                    const max = Math.max(...candles.map(c => c.high));
-                    const range = max - min || 1;
+                return (
+                    <div className="card" style={{ height: `${chartHeight}px`, padding: '0', position: 'relative', overflow: 'hidden' }}>
+                        {/* SVG Chart */}
+                        <svg width="100%" height={chartHeight} viewBox={`0 0 ${candleCount * 14} ${chartHeight}`} preserveAspectRatio="none">
+                            {/* Grid lines */}
+                            {[0.25, 0.5, 0.75].map(pct => (
+                                <line key={pct} x1="0" y1={padding.top + innerH * pct} x2={candleCount * 14} y2={padding.top + innerH * pct} stroke="rgba(255,255,255,0.06)" strokeWidth="0.5" />
+                            ))}
 
-                    const heightPercent = ((Math.abs(candle.open - candle.close)) / range) * 80;
-                    const bottomPercent = ((Math.min(candle.open, candle.close) - min) / range) * 80 + 10;
-                    const isGreen = candle.close >= candle.open;
+                            {/* MA20 Line */}
+                            {ma50Data.length > 1 && (
+                                <polyline
+                                    fill="none"
+                                    stroke="#a78bfa"
+                                    strokeWidth="1.5"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    opacity="0.7"
+                                    points={ma50Data.map((val, i) => `${i * 14 + 7},${yFromPrice(val)}`).join(' ')}
+                                />
+                            )}
 
-                    return (
-                        <div key={i} style={{
-                            flex: 1,
-                            height: '100%',
-                            position: 'relative'
-                        }}>
-                            {/* Wick */}
-                            <div style={{
-                                position: 'absolute',
-                                left: '50%',
-                                bottom: `${((candle.low - min) / range) * 80 + 10}%`,
-                                height: `${((candle.high - candle.low) / range) * 80}%`,
-                                width: '1px',
-                                background: isGreen ? '#4ade80' : '#ef4444',
-                                opacity: 0.7
-                            }}></div>
-                            {/* Body */}
-                            <div style={{
-                                position: 'absolute',
-                                left: '10%',
-                                right: '10%',
-                                bottom: `${bottomPercent}%`,
-                                height: `${Math.max(heightPercent, 1)}%`,
-                                background: isGreen ? '#4ade80' : '#ef4444',
-                                opacity: 0.9,
-                                borderRadius: '1px'
-                            }}></div>
-                        </div>
-                    );
-                })}
+                            {/* Entry Price Line */}
+                            {tradeInfo && (
+                                <>
+                                    <line x1="0" y1={yFromPrice(tradeInfo.entryPrice)} x2={candleCount * 14} y2={yFromPrice(tradeInfo.entryPrice)} stroke="#fbbf24" strokeWidth="1" strokeDasharray="6,3" opacity="0.8" />
+                                    <rect x="0" y={yFromPrice(tradeInfo.entryPrice) - 8} width="42" height="14" rx="2" fill="#fbbf24" opacity="0.9" />
+                                    <text x="21" y={yFromPrice(tradeInfo.entryPrice) + 2} textAnchor="middle" fill="#0f172a" fontSize="7" fontWeight="bold">ENTRY</text>
+                                </>
+                            )}
 
-                {/* Result Overlay */}
-                {result && (
-                    <div style={{ position: 'absolute', inset: 0, background: 'rgba(2, 6, 23, 0.9)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
-                        <div style={{ fontSize: '3rem', marginBottom: '10px' }}>
-                            {result.win ? '🤑' : '📉'}
+                            {/* TP Line */}
+                            {tradeInfo && (
+                                <>
+                                    <line x1="0" y1={yFromPrice(tradeInfo.tp)} x2={candleCount * 14} y2={yFromPrice(tradeInfo.tp)} stroke="#4ade80" strokeWidth="1.5" strokeDasharray="4,2" opacity="0.9" />
+                                    <rect x="0" y={yFromPrice(tradeInfo.tp) - 8} width="24" height="14" rx="2" fill="#4ade80" opacity="0.9" />
+                                    <text x="12" y={yFromPrice(tradeInfo.tp) + 2} textAnchor="middle" fill="#0f172a" fontSize="7" fontWeight="bold">TP</text>
+                                </>
+                            )}
+
+                            {/* SL Line */}
+                            {tradeInfo && (
+                                <>
+                                    <line x1="0" y1={yFromPrice(tradeInfo.sl)} x2={candleCount * 14} y2={yFromPrice(tradeInfo.sl)} stroke="#ef4444" strokeWidth="1.5" strokeDasharray="4,2" opacity="0.9" />
+                                    <rect x="0" y={yFromPrice(tradeInfo.sl) - 8} width="22" height="14" rx="2" fill="#ef4444" opacity="0.9" />
+                                    <text x="11" y={yFromPrice(tradeInfo.sl) + 2} textAnchor="middle" fill="white" fontSize="7" fontWeight="bold">SL</text>
+                                </>
+                            )}
+
+                            {/* Vertical Divider at entry */}
+                            {result && entryIndex < candleCount && (
+                                <line x1={entryIndex * 14} y1="0" x2={entryIndex * 14} y2={chartHeight} stroke="rgba(251,191,36,0.4)" strokeWidth="1" strokeDasharray="4,4" />
+                            )}
+
+                            {/* Candles */}
+                            {candles.map((candle, i) => {
+                                const isGreen = candle.close >= candle.open;
+                                const color = isGreen ? '#4ade80' : '#ef4444';
+                                const bodyTop = yFromPrice(Math.max(candle.open, candle.close));
+                                const bodyBot = yFromPrice(Math.min(candle.open, candle.close));
+                                const bodyH = Math.max(bodyBot - bodyTop, 0.5);
+                                const wickTop = yFromPrice(candle.high);
+                                const wickBot = yFromPrice(candle.low);
+                                const cx = i * 14 + 7;
+                                const isRevealed = i >= entryIndex && result;
+                                const opacity = isRevealed ? 0.95 : 0.85;
+
+                                return (
+                                    <g key={i} opacity={opacity}>
+                                        {/* Revealed candle background tint */}
+                                        {isRevealed && (
+                                            <rect x={i * 14} y={0} width={14} height={chartHeight} fill="rgba(251,191,36,0.03)" />
+                                        )}
+                                        {/* Wick */}
+                                        <line x1={cx} y1={wickTop} x2={cx} y2={wickBot} stroke={color} strokeWidth="1" />
+                                        {/* Body */}
+                                        <rect x={i * 14 + 3} y={bodyTop} width={8} height={bodyH} fill={color} rx="0.5" />
+                                    </g>
+                                );
+                            })}
+                        </svg>
+
+                        {/* MA Legend */}
+                        <div style={{ position: 'absolute', top: '6px', right: '8px', fontSize: '0.6rem', color: '#a78bfa', fontWeight: '600', opacity: 0.8 }}>
+                            MA20
                         </div>
-                        <div style={{ fontSize: '1.2rem', color: '#94a3b8' }}>
-                            El precio se movió <span style={{ color: 'white' }}>{result.percent > 0 ? '+' : ''}{result.percent}%</span>
-                        </div>
-                        <div style={{ fontSize: '2rem', fontWeight: '800', color: result.win ? '#4ade80' : '#ef4444', margin: '15px 0' }}>
-                            {result.win ? `+$${result.amount}` : `-$${Math.abs(result.amount)}`}
-                        </div>
-                        <button onClick={fetchChart} className="btn" style={{ width: 'auto', padding: '10px 30px' }}>
-                            Siguiente Gráfico
-                        </button>
                     </div>
-                )}
-            </div>
+                );
+            })()}
+
+            {/* Result Banner (below chart, doesn't hide candles) */}
+            {result && (
+                <div style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '12px 16px', borderRadius: '12px', marginBottom: '10px',
+                    background: result.win ? 'rgba(74, 222, 128, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                    border: `1px solid ${result.win ? 'rgba(74, 222, 128, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{ fontSize: '1.5rem' }}>{result.win ? '🤑' : '📉'}</span>
+                        <div>
+                            <div style={{ fontSize: '1.1rem', fontWeight: '800', color: result.win ? '#4ade80' : '#ef4444' }}>
+                                {result.win ? `+$${result.amount}` : `-$${Math.abs(result.amount)}`}
+                            </div>
+                            <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
+                                Precio se movió {result.percent > 0 ? '+' : ''}{result.percent}%
+                            </div>
+                        </div>
+                    </div>
+                    <button onClick={fetchChart} className="btn" style={{ width: 'auto', padding: '8px 20px', fontSize: '0.8rem' }}>
+                        Siguiente →
+                    </button>
+                </div>
+            )}
 
             {/* GAME CONTROLS GRID */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '15px' }}>

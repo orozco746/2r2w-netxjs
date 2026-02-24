@@ -232,16 +232,7 @@ export default function LoginPage() {
                 Google
             </button>
 
-             <button
-                onClick={() => {
-                    localStorage.setItem('user', 'true');
-                    router.push('/');
-                }}
-                className="btn"
-                style={{ marginTop: '15px', background: 'rgba(251, 191, 36, 0.1)', color: '#fbbf24', border: '1px dashed #fbbf24' }}
-            >
-                🛠️ Entrar como Desarrollador
-            </button>
+
 
             <p style={{ marginTop: '30px', fontSize: '0.85rem' }}>
                 {isRegistering ? '¿Ya eres miembro?' : '¿Nuevo aquí?'}

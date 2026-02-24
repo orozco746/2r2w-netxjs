@@ -23,24 +23,9 @@ export default function BottomNav() {
     const pathname = usePathname();
     const [tradingLocked, setTradingLocked] = useState(true);
     const [showLockPopup, setShowLockPopup] = useState(false);
-    const [ruleStatus, setRuleStatus] = useState({ lp: 0, mp: 0 });
+    const [ruleStatus, setRuleStatus] = useState({ combined: 0 });
 
     useEffect(() => {
-        // DEV BYPASS
-        if (typeof window !== 'undefined' && localStorage.getItem('user') === 'true') {
-            // Check if we have a real Firebase user too
-            const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-                if (currentUser) {
-                    await checkTradingEligibility(currentUser.uid);
-                } else {
-                    // Pure dev mode — keep locked
-                    setTradingLocked(true);
-                    setRuleStatus({ lp: 0, mp: 0 });
-                }
-            });
-            return () => unsubscribe();
-        }
-
         const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
             if (currentUser) {
                 await checkTradingEligibility(currentUser.uid);
@@ -50,7 +35,7 @@ export default function BottomNav() {
     }, []);
 
     /**
-     * Checks if LP >= 50% and MP >= 30% of total capital.
+     * Checks if LP + MP >= 90% of total capital.
      * @param {string} uid - User ID
      */
     const checkTradingEligibility = async (uid) => {
@@ -62,13 +47,12 @@ export default function BottomNav() {
                 const trueTotal = bal.lp + bal.mp + bal.trading;
                 if (trueTotal <= 0) {
                     setTradingLocked(true);
-                    setRuleStatus({ lp: 0, mp: 0 });
+                    setRuleStatus({ combined: 0 });
                     return;
                 }
-                const lpPercent = (bal.lp / trueTotal) * 100;
-                const mpPercent = (bal.mp / trueTotal) * 100;
-                setRuleStatus({ lp: lpPercent, mp: mpPercent });
-                setTradingLocked(!(lpPercent >= 50 && mpPercent >= 30));
+                const combinedPercent = ((bal.lp + bal.mp) / trueTotal) * 100;
+                setRuleStatus({ combined: combinedPercent });
+                setTradingLocked(combinedPercent < 90);
             }
         } catch (e) {
             console.error("BottomNav eligibility check error:", e.code, e.message);
@@ -221,30 +205,29 @@ export default function BottomNav() {
                             marginBottom: '25px',
                             lineHeight: '1.5',
                         }}>
-                            Para operar en Trading, primero debes diversificar tu portafolio según la regla del club:
+                            La suma de tus inversiones en LP y MP debe ser al menos el <strong style={{ color: '#fbbf24' }}>90%</strong> de tu capital total.
                         </p>
 
-                        {/* Rules Progress */}
+                        {/* Rule Progress */}
                         <div style={{
                             background: 'rgba(0,0,0,0.3)',
                             padding: '15px',
                             borderRadius: '12px',
                             marginBottom: '20px',
                         }}>
-                            {/* LP Rule */}
-                            <div style={{ marginBottom: '15px' }}>
+                            <div style={{ marginBottom: '6px' }}>
                                 <div style={{
                                     display: 'flex',
                                     justifyContent: 'space-between',
                                     marginBottom: '6px',
                                     fontSize: '0.8rem',
                                 }}>
-                                    <span style={{ color: '#94a3b8' }}>Inversión LP (Mín 50%)</span>
+                                    <span style={{ color: '#94a3b8' }}>LP + MP (Mín 90%)</span>
                                     <span style={{
-                                        color: ruleStatus.lp >= 50 ? '#4ade80' : '#ef4444',
+                                        color: ruleStatus.combined >= 90 ? '#4ade80' : '#ef4444',
                                         fontWeight: 'bold',
                                     }}>
-                                        {ruleStatus.lp.toFixed(1)}%
+                                        {ruleStatus.combined.toFixed(1)}%
                                     </span>
                                 </div>
                                 <div style={{
@@ -255,44 +238,9 @@ export default function BottomNav() {
                                     overflow: 'hidden',
                                 }}>
                                     <div style={{
-                                        width: `${Math.min(ruleStatus.lp, 100)}%`,
+                                        width: `${Math.min(ruleStatus.combined, 100)}%`,
                                         height: '100%',
-                                        background: ruleStatus.lp >= 50
-                                            ? 'linear-gradient(90deg, #22c55e, #4ade80)'
-                                            : 'linear-gradient(90deg, #dc2626, #ef4444)',
-                                        borderRadius: '4px',
-                                        transition: 'width 0.5s ease',
-                                    }} />
-                                </div>
-                            </div>
-
-                            {/* MP Rule */}
-                            <div>
-                                <div style={{
-                                    display: 'flex',
-                                    justifyContent: 'space-between',
-                                    marginBottom: '6px',
-                                    fontSize: '0.8rem',
-                                }}>
-                                    <span style={{ color: '#94a3b8' }}>Inversión MP (Mín 30%)</span>
-                                    <span style={{
-                                        color: ruleStatus.mp >= 30 ? '#4ade80' : '#ef4444',
-                                        fontWeight: 'bold',
-                                    }}>
-                                        {ruleStatus.mp.toFixed(1)}%
-                                    </span>
-                                </div>
-                                <div style={{
-                                    width: '100%',
-                                    height: '8px',
-                                    background: '#1e293b',
-                                    borderRadius: '4px',
-                                    overflow: 'hidden',
-                                }}>
-                                    <div style={{
-                                        width: `${Math.min(ruleStatus.mp, 100)}%`,
-                                        height: '100%',
-                                        background: ruleStatus.mp >= 30
+                                        background: ruleStatus.combined >= 90
                                             ? 'linear-gradient(90deg, #22c55e, #4ade80)'
                                             : 'linear-gradient(90deg, #dc2626, #ef4444)',
                                         borderRadius: '4px',
